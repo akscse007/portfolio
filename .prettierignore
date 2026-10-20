@@ -1,0 +1,16 @@
+node_modules
+.next
+.next-dev
+storage
+dist
+coverage
+playwright-report
+test-results
+prisma/migrations
+package-lock.json
+*.md
+storage-test
+storage-e2e
+public/pdf.worker.min.mjs
+.claude
+tsconfig.json

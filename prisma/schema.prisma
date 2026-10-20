@@ -1,0 +1,626 @@
+// AKASH ROY — DIGITAL LAB
+// PostgreSQL schema. Binary media lives in the configured storage provider;
+// only metadata is stored here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum MediaKind {
+  IMAGE
+  PDF
+  VIDEO
+  DOCUMENT
+}
+
+enum AchievementCategory {
+  PROFESSIONAL_CERTIFICATION
+  COURSE_SPECIALIZATION
+  ACADEMIC
+  RESEARCH_INTERNSHIP
+  AWARD_HONOUR
+  HACKATHON_COMPETITION
+  LEADERSHIP_VOLUNTEERING
+  WORKSHOP_TRAINING
+  SPORTS_EXTRACURRICULAR
+  OTHER
+}
+
+enum AchievementAssetRole {
+  CERTIFICATE
+  PREVIEW
+  PHOTO
+  GALLERY
+}
+
+enum ProjectStage {
+  LIVE
+  IN_PROGRESS
+  RESEARCH
+  PROTOTYPE
+  ARCHIVED
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum VideoProvider {
+  YOUTUBE
+  VIMEO
+  UPLOAD
+}
+
+enum ExperienceKind {
+  WORK
+  RESEARCH
+  FREELANCE
+  LEADERSHIP
+  VOLUNTEER
+}
+
+enum MessageStatus {
+  NEW
+  READ
+  ARCHIVED
+  SPAM
+}
+
+// ─────────────────────────────────────────────────────────────
+// Auth
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(ADMIN)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+  auditLogs    AuditLog[]
+}
+
+/// The cookie carries a random token; only its SHA-256 hash is stored.
+model Session {
+  id         String   @id // sha256(token)
+  userId     String
+  csrfToken  String
+  expiresAt  DateTime
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Fixed-window counters used for login, contact and upload throttling.
+model RateLimit {
+  key         String   @id
+  count       Int      @default(0)
+  windowStart DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Profile & settings (singletons, id = "default")
+// ─────────────────────────────────────────────────────────────
+
+model Profile {
+  id                String    @id @default("default")
+  name              String
+  headline          String
+  tagline           String
+  subTagline        String
+  location          String
+  timezone          String    @default("Asia/Kolkata")
+  shortBio          String
+  bio               String // Markdown
+  researchInterests String[]
+  email             String?
+  githubUrl         String?
+  linkedinUrl       String?
+  /// Owner-approved CV stored as a media asset (PDF). Falls back to cvUrl.
+  cvMediaId         String?
+  cvMedia           MediaAsset? @relation("ProfileCv", fields: [cvMediaId], references: [id], onDelete: SetNull)
+  cvUrl             String?
+  portraitMediaId   String?
+  portrait          MediaAsset? @relation("ProfilePortrait", fields: [portraitMediaId], references: [id], onDelete: SetNull)
+  availabilityOn    Boolean   @default(false)
+  availabilityLabel String?
+  showClock         Boolean   @default(true)
+  updatedAt         DateTime  @updatedAt
+}
+
+model SiteSettings {
+  id               String   @id @default("default")
+  siteTitle        String
+  siteDescription  String
+  siteUrl          String?
+  defaultOgMediaId String?
+  defaultOgImage   MediaAsset? @relation("SiteOg", fields: [defaultOgMediaId], references: [id], onDelete: SetNull)
+  twitterHandle    String?
+  contactEnabled   Boolean  @default(true)
+  contactAutoReply Boolean  @default(false)
+  footerNote       String?
+  analyticsNote    String?
+  updatedAt        DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────
+// Media
+// ─────────────────────────────────────────────────────────────
+
+model MediaAsset {
+  id           String     @id @default(cuid())
+  /// Storage key of the original object (never user-controlled).
+  key          String     @unique
+  kind         MediaKind
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  /// Storage keys of derived variants, e.g. { "thumb": "...", "display": "..." }
+  variants     Json?
+  checksum     String
+  originalName String
+  alt          String     @default("")
+  caption      String?
+  visibility   Visibility @default(PRIVATE)
+  /// Optional: a derived public preview created from this original (e.g. cropped/redacted).
+  derivedFromId String?
+  derivedFrom   MediaAsset?  @relation("Derivation", fields: [derivedFromId], references: [id], onDelete: SetNull)
+  derivatives   MediaAsset[] @relation("Derivation")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  projectMedia      ProjectMedia[]
+  achievementAssets AchievementAsset[]
+  projectCovers     Project[]          @relation("ProjectCover")
+  postCovers        Post[]             @relation("PostCover")
+  videoPosters      Video[]            @relation("VideoPoster")
+  videoFiles        Video[]            @relation("VideoFile")
+  videoCaptions     Video[]            @relation("VideoCaptions")
+  profileCvs        Profile[]          @relation("ProfileCv")
+  profilePortraits  Profile[]          @relation("ProfilePortrait")
+  siteOg            SiteSettings[]     @relation("SiteOg")
+
+  @@index([kind])
+  @@index([visibility])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Taxonomy
+// ─────────────────────────────────────────────────────────────
+
+model Tag {
+  id           String           @id @default(cuid())
+  name         String           @unique
+  slug         String           @unique
+  projects     ProjectTag[]
+  posts        PostTag[]
+  videos       VideoTag[]
+  achievements AchievementTag[]
+}
+
+/// Blog topics (Linear Algebra, Algorithms, RAG, ...)
+model Topic {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String   @default("")
+  group       String   @default("General") // Mathematics, Computer Science, AI/ML, Engineering, Research
+  order       Int      @default(0)
+  posts       Post[]
+  series      Series[]
+}
+
+model Skill {
+  id       String         @id @default(cuid())
+  name     String         @unique
+  slug     String         @unique
+  group    String // Languages, Frontend, Backend, Data, AI/ML, DevOps
+  order    Int            @default(0)
+  projects ProjectSkill[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// Projects
+// ─────────────────────────────────────────────────────────────
+
+model Project {
+  id             String        @id @default(cuid())
+  slug           String        @unique
+  title          String
+  subtitle       String        @default("")
+  summary        String
+  category       String // Full Stack, AI/ML, Research, FinTech, Developer Tools
+  stage          ProjectStage  @default(IN_PROGRESS)
+  stageNote      String? // e.g. "Research demonstration — simulated data"
+  role           String        @default("")
+  period         String        @default("")
+  problem        String        @default("") // Markdown
+  solution       String        @default("") // Markdown
+  architecture   String        @default("") // Markdown
+  contribution   String        @default("") // Markdown
+  decisions      String        @default("") // Markdown
+  challenges     String        @default("") // Markdown
+  lessons        String        @default("") // Markdown
+  liveUrl        String?
+  repoUrl        String?
+  coverId        String?
+  cover          MediaAsset?   @relation("ProjectCover", fields: [coverId], references: [id], onDelete: SetNull)
+  accent         String? // optional hex accent for the case study
+  status         PublishStatus @default(DRAFT)
+  featured       Boolean       @default(false)
+  order          Int           @default(0)
+  seoTitle       String?
+  seoDescription String?
+  publishedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  media        ProjectMedia[]
+  skills       ProjectSkill[]
+  tags         ProjectTag[]
+  achievements AchievementProject[]
+  posts        PostProject[]
+  videos       Video[]
+
+  @@index([status, featured, order])
+  @@index([category])
+}
+
+model ProjectMedia {
+  id        String     @id @default(cuid())
+  projectId String
+  mediaId   String
+  caption   String?
+  order     Int        @default(0)
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  media     MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, mediaId])
+  @@index([projectId, order])
+}
+
+model ProjectSkill {
+  projectId String
+  skillId   String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  skill     Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, skillId])
+  @@index([skillId])
+}
+
+model ProjectTag {
+  projectId String
+  tagId     String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, tagId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Achievements & certificates
+// ─────────────────────────────────────────────────────────────
+
+model Achievement {
+  id                 String              @id @default(cuid())
+  slug               String              @unique
+  title              String
+  category           AchievementCategory
+  issuer             String
+  recipientName      String              @default("Akash Roy")
+  issueDate          DateTime?
+  /// Free-form date label when an exact date is unknown or a range applies (e.g. "2025–26").
+  dateLabel          String?
+  expirationDate     DateTime?
+  credentialId       String?
+  verificationUrl    String?
+  summary            String              @default("")
+  context            String              @default("") // Markdown
+  learned            String              @default("") // Markdown
+  skillsCovered      String[]
+  status             PublishStatus       @default(DRAFT)
+  featured           Boolean             @default(false)
+  order              Int                 @default(0)
+  // Per-field public visibility (default: private).
+  showCredentialId   Boolean             @default(false)
+  showVerification   Boolean             @default(false)
+  showRecipient      Boolean             @default(true)
+  /// The original certificate document may be viewed/downloaded by the public.
+  documentPublic     Boolean             @default(false)
+  /// Owner explicitly approved publishing the preview image(s).
+  previewApproved    Boolean             @default(false)
+  /// Owner confirms the credential was independently verified (e.g. via issuer's portal).
+  verified           Boolean             @default(false)
+  seoTitle           String?
+  seoDescription     String?
+  canonicalUrl       String?
+  publishedAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  assets   AchievementAsset[]
+  tags     AchievementTag[]
+  projects AchievementProject[]
+  posts    AchievementPost[]
+
+  @@index([status, featured, order])
+  @@index([category])
+  @@index([issueDate])
+}
+
+model AchievementAsset {
+  id            String               @id @default(cuid())
+  achievementId String
+  mediaId       String
+  role          AchievementAssetRole
+  order         Int                  @default(0)
+  achievement   Achievement          @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  media         MediaAsset           @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([achievementId, mediaId, role])
+  @@index([achievementId, role, order])
+}
+
+model AchievementTag {
+  achievementId String
+  tagId         String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  tag           Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([achievementId, tagId])
+}
+
+model AchievementProject {
+  achievementId String
+  projectId     String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([achievementId, projectId])
+}
+
+model AchievementPost {
+  achievementId String
+  postId        String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  post          Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([achievementId, postId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Blog
+// ─────────────────────────────────────────────────────────────
+
+model Series {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String   @default("")
+  topicId     String?
+  topic       Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  posts       Post[]
+  createdAt   DateTime @default(now())
+}
+
+model Post {
+  id             String        @id @default(cuid())
+  slug           String        @unique
+  title          String
+  excerpt        String        @default("")
+  content        String // Markdown (sanitised at render time)
+  difficulty     Difficulty    @default(BEGINNER)
+  readingMinutes Int           @default(1)
+  topicId        String?
+  topic          Topic?        @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  seriesId       String?
+  series         Series?       @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  seriesOrder    Int?
+  coverId        String?
+  cover          MediaAsset?   @relation("PostCover", fields: [coverId], references: [id], onDelete: SetNull)
+  status         PublishStatus @default(DRAFT)
+  featured       Boolean       @default(false)
+  seoTitle       String?
+  seoDescription String?
+  publishedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  tags         PostTag[]
+  revisions    PostRevision[]
+  projects     PostProject[]
+  achievements AchievementPost[]
+
+  @@index([status, publishedAt])
+  @@index([topicId])
+  @@index([seriesId, seriesOrder])
+}
+
+model PostRevision {
+  id        String   @id @default(cuid())
+  postId    String
+  title     String
+  excerpt   String
+  content   String
+  reason    String   @default("save") // save | autosave | publish | restore
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+}
+
+model PostTag {
+  postId String
+  tagId  String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+}
+
+model PostProject {
+  postId    String
+  projectId String
+  post      Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([postId, projectId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Videos
+// ─────────────────────────────────────────────────────────────
+
+model Video {
+  id              String        @id @default(cuid())
+  slug            String        @unique
+  title           String
+  description     String        @default("")
+  category        String        @default("Demo")
+  provider        VideoProvider
+  /// YouTube/Vimeo video ID (validated). Never a raw embed URL.
+  externalId      String?
+  fileId          String?
+  file            MediaAsset?   @relation("VideoFile", fields: [fileId], references: [id], onDelete: SetNull)
+  posterId        String?
+  poster          MediaAsset?   @relation("VideoPoster", fields: [posterId], references: [id], onDelete: SetNull)
+  captionsId      String?
+  captions        MediaAsset?   @relation("VideoCaptions", fields: [captionsId], references: [id], onDelete: SetNull)
+  durationSeconds Int?
+  transcript      String?
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  status          PublishStatus @default(DRAFT)
+  featured        Boolean       @default(false)
+  order           Int           @default(0)
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  tags            VideoTag[]
+
+  @@index([status, featured, order])
+}
+
+model VideoTag {
+  videoId String
+  tagId   String
+  video   Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  tag     Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, tagId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// CV: experience & education
+// ─────────────────────────────────────────────────────────────
+
+model Experience {
+  id           String         @id @default(cuid())
+  organization String
+  role         String
+  kind         ExperienceKind @default(WORK)
+  location     String?
+  period       String // display label, e.g. "Sep 2025 — Present"
+  startDate    DateTime?
+  endDate      DateTime?
+  current      Boolean        @default(false)
+  summary      String         @default("")
+  highlights   String[]
+  url          String?
+  visible      Boolean        @default(true)
+  order        Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([visible, order])
+}
+
+model Education {
+  id          String   @id @default(cuid())
+  institution String
+  credential  String
+  period      String
+  result      String?
+  note        String?
+  visible     Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([visible, order])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Contact
+// ─────────────────────────────────────────────────────────────
+
+model ContactMessage {
+  id          String        @id @default(cuid())
+  name        String
+  email       String
+  subject     String
+  body        String
+  status      MessageStatus @default(NEW)
+  ipHash      String?
+  userAgent   String?
+  emailSent   Boolean       @default(false)
+  emailError  String?
+  createdAt   DateTime      @default(now())
+
+  @@index([status, createdAt])
+}

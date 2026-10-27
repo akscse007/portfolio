@@ -18,6 +18,14 @@ import type { GalleryItem } from '@/components/admin/GalleryEditor';
 import { ArticleEnhancer } from '@/components/blog/ArticleEnhancer';
 import { slugify, SLUG_RE } from '@/lib/utils';
 
+export type AttachmentForm = {
+  mediaId: string;
+  title: string;
+  description: string;
+  order: number;
+  media: GalleryItem;
+};
+
 export type PostForm = {
   id?: string;
   slug: string;
@@ -36,6 +44,7 @@ export type PostForm = {
   publishedAt: string;
   tags: string[];
   projectIds: string[];
+  attachments: AttachmentForm[];
 };
 
 type Revision = { id: string; title: string; reason: string; createdAt: string };
@@ -69,6 +78,7 @@ export function PostEditor({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [picker, setPicker] = useState(false);
+  const [attachPicker, setAttachPicker] = useState(false);
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [restore, setRestore] = useState<Revision | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -159,6 +169,12 @@ export function PostEditor({
         seriesId: f.seriesId || null,
         seriesOrder: f.seriesOrder || null,
         publishedAt: f.publishedAt || null,
+        attachments: f.attachments.map((a, i) => ({
+          mediaId: a.mediaId,
+          title: a.title,
+          description: a.description,
+          order: i,
+        })),
       };
       const r = await api<{ post: { id: string; status: PostForm['status'] } }>(
         f.id ? `/api/admin/posts/${f.id}` : '/api/admin/posts',
@@ -491,6 +507,58 @@ export function PostEditor({
         </Panel>
       </div>
 
+      <Panel title="PDF Attachments" description="Attach downloadable PDF notes to this post.">
+        <div className="space-y-3">
+          {f.attachments.map((a, i) => (
+            <div key={a.mediaId} className="flex items-start gap-3 rounded-sm border border-line p-3">
+              <div className="flex shrink-0 flex-col items-center rounded-xs bg-surface p-2">
+                <span className="font-mono text-xs uppercase text-accent">PDF</span>
+                <span className="mt-0.5 text-[0.6rem] text-muted">{a.media.originalName}</span>
+              </div>
+              <div className="flex-1 space-y-2">
+                <input
+                  type="text"
+                  value={a.title}
+                  onChange={(e) => {
+                    const next = [...f.attachments];
+                    next[i] = { ...next[i]!, title: e.target.value };
+                    set('attachments', next);
+                  }}
+                  placeholder="Title for this PDF"
+                  className="h-8 w-full rounded-sm border border-line bg-surface px-2 text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={a.description}
+                  onChange={(e) => {
+                    const next = [...f.attachments];
+                    next[i] = { ...next[i]!, description: e.target.value };
+                    set('attachments', next);
+                  }}
+                  placeholder="Brief description (optional)"
+                  className="h-8 w-full rounded-sm border border-line bg-surface px-2 text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none"
+                />
+              </div>
+              <button
+                type="button"
+                className="btn-ghost btn-sm text-red-500"
+                onClick={() => set('attachments', f.attachments.filter((_, j) => j !== i))}
+                aria-label={`Remove ${a.title}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn-ghost btn-sm"
+            onClick={() => setAttachPicker(true)}
+          >
+            + Add PDF
+          </button>
+        </div>
+      </Panel>
+
       {f.id && (
         <Panel
           title="Revisions"
@@ -572,6 +640,26 @@ export function PostEditor({
       >
         The current content is saved as a revision first, so you can undo this.
       </ConfirmDialog>
+      <MediaPicker
+        open={attachPicker}
+        onClose={() => setAttachPicker(false)}
+        kinds={['PDF']}
+        multiple
+        title="Attach PDF"
+        onSelect={(items) => {
+          const existing = new Set(f.attachments.map((a) => a.mediaId));
+          const added = items
+            .filter((m) => !existing.has(m.id))
+            .map((m, i) => ({
+              mediaId: m.id,
+              title: m.originalName.replace(/\.pdf$/i, ''),
+              description: '',
+              order: f.attachments.length + i,
+              media: { id: m.id, kind: m.kind, alt: m.alt, originalName: m.originalName, mimeType: m.mimeType },
+            }));
+          set('attachments', [...f.attachments, ...added]);
+        }}
+      />
     </div>
   );
 }

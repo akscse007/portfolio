@@ -225,13 +225,16 @@ model MediaAsset {
   projectMedia      ProjectMedia[]
   achievementAssets AchievementAsset[]
   projectCovers     Project[]          @relation("ProjectCover")
+  projectPreviews   Project[]          @relation("ProjectPreview")
   postCovers        Post[]             @relation("PostCover")
+  postAttachments   PostAttachment[]
   videoPosters      Video[]            @relation("VideoPoster")
   videoFiles        Video[]            @relation("VideoFile")
   videoCaptions     Video[]            @relation("VideoCaptions")
   profileCvs        Profile[]          @relation("ProfileCv")
   profilePortraits  Profile[]          @relation("ProfilePortrait")
   siteOg            SiteSettings[]     @relation("SiteOg")
+  libraryNotes      LibraryNote[]
 
   @@index([kind])
   @@index([visibility])
@@ -250,6 +253,7 @@ model Tag {
   posts        PostTag[]
   videos       VideoTag[]
   achievements AchievementTag[]
+  libraryNotes LibraryNoteTag[]
 }
 
 /// Blog topics (Linear Algebra, Algorithms, RAG, ...)
@@ -299,6 +303,8 @@ model Project {
   repoUrl        String?
   coverId        String?
   cover          MediaAsset?   @relation("ProjectCover", fields: [coverId], references: [id], onDelete: SetNull)
+  previewVideoId String?
+  previewVideo   MediaAsset?   @relation("ProjectPreview", fields: [previewVideoId], references: [id], onDelete: SetNull)
   accent         String? // optional hex accent for the case study
   status         PublishStatus @default(DRAFT)
   featured       Boolean       @default(false)
@@ -485,6 +491,7 @@ model Post {
   revisions    PostRevision[]
   projects     PostProject[]
   achievements AchievementPost[]
+  attachments  PostAttachment[]
 
   @@index([status, publishedAt])
   @@index([topicId])
@@ -603,6 +610,60 @@ model Education {
   updatedAt   DateTime @updatedAt
 
   @@index([visible, order])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Post attachments (PDF notes on blog posts)
+// ─────────────────────────────────────────────────────────────
+
+model PostAttachment {
+  id          String     @id @default(cuid())
+  postId      String
+  mediaId     String
+  title       String
+  description String     @default("")
+  order       Int        @default(0)
+  post        Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  media       MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, mediaId])
+  @@index([postId, order])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Library notes (standalone PDF reference library)
+// ─────────────────────────────────────────────────────────────
+
+model LibraryNote {
+  id            String        @id @default(cuid())
+  slug          String        @unique
+  title         String
+  description   String        @default("")
+  subject       String        @default("General")
+  category      String        @default("Notes")
+  academicLevel String        @default("Undergraduate")
+  mediaId       String
+  media         MediaAsset    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  status        PublishStatus @default(DRAFT)
+  featured      Boolean       @default(false)
+  order         Int           @default(0)
+  publishedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  tags          LibraryNoteTag[]
+
+  @@index([status, order])
+  @@index([subject])
+  @@index([category])
+}
+
+model LibraryNoteTag {
+  noteId String
+  tagId  String
+  note   LibraryNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag    Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
 }
 
 // ─────────────────────────────────────────────────────────────

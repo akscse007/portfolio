@@ -59,6 +59,35 @@ export default async function PostPage({ params }: Props) {
         aside={
           <>
             {p.series && <SeriesNav series={p.series} posts={p.seriesPosts} current={p.slug} />}
+            {p.attachments.length > 0 && (
+              <div>
+                <p className="label mb-2">PDF Notes</p>
+                <ul className="space-y-2">
+                  {p.attachments.map((a) => (
+                    <li key={a.id}>
+                      <a
+                        href={a.media.original}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex items-start gap-2 rounded-sm border border-line p-3 transition-colors hover:border-accent/40"
+                      >
+                        <span className="mt-0.5 shrink-0 rounded-xs bg-surface px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-accent">
+                          PDF
+                        </span>
+                        <span className="flex-1">
+                          <span className="block text-sm font-medium group-hover:text-accent">
+                            {a.title}
+                          </span>
+                          {a.description && (
+                            <span className="mt-0.5 block text-xs text-muted">{a.description}</span>
+                          )}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {(p.projects.length > 0 || p.achievements.length > 0) && (
               <div>
                 <p className="label mb-2">Related</p>

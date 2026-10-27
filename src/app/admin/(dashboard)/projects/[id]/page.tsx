@@ -12,6 +12,7 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
       where: { id },
       include: {
         cover: true,
+        previewVideo: true,
         skills: { include: { skill: true } },
         tags: { include: { tag: true } },
         media: { orderBy: { order: 'asc' }, include: { media: true } },
@@ -41,6 +42,7 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
     liveUrl: p.liveUrl ?? '',
     repoUrl: p.repoUrl ?? '',
     cover: p.cover,
+    previewVideo: p.previewVideo ?? null,
     accent: p.accent ?? '',
     status: p.status,
     featured: p.featured,

@@ -128,13 +128,13 @@ export function Hero({ profile }: { profile: NonNullable<PublicProfile> }) {
                 className="flex justify-center lg:col-span-4 lg:col-start-9 lg:row-span-2 lg:row-start-1 lg:justify-end"
                 data-hero-fade
               >
-                <div className="relative w-52 overflow-hidden rounded-sm sm:w-60 lg:w-full">
+                <div className="relative aspect-square w-48 overflow-hidden rounded-full sm:w-56 lg:w-64 ring-2 ring-accent/30 ring-offset-4 ring-offset-bg shadow-lg shadow-accent/10">
                   <MediaImage
                     image={profile.portrait}
                     priority
-                    sizes="(min-width: 1024px) 30vw, 240px"
-                    ratio="3 / 4"
-                    className="ring-1 ring-line/50"
+                    sizes="(min-width: 1024px) 256px, 224px"
+                    ratio="1 / 1"
+                    imgClassName="object-cover object-top"
                   />
                 </div>
               </div>

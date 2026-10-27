@@ -31,6 +31,7 @@ export default async function NewPostPage() {
           publishedAt: '',
           tags: [],
           projectIds: [],
+          attachments: [],
         }}
       />
     </div>

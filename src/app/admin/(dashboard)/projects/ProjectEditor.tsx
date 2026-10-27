@@ -39,6 +39,7 @@ export type ProjectForm = {
   liveUrl: string;
   repoUrl: string;
   cover: GalleryItem | null;
+  previewVideo: GalleryItem | null;
   accent: string;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   featured: boolean;
@@ -72,6 +73,7 @@ export function ProjectEditor({
       ...f,
       status: status ?? f.status,
       coverId: f.cover?.id ?? null,
+      previewVideoId: f.previewVideo?.id ?? null,
       mediaIds: f.gallery.map((g) => g.id),
       accent: f.accent || null,
     };
@@ -225,6 +227,13 @@ export function ProjectEditor({
               value={f.cover}
               onChange={(m) => set('cover', m)}
               hint="Use a 16:10 screenshot. Alt text is edited in the media library."
+            />
+            <MediaSlot
+              label="Preview video"
+              value={f.previewVideo}
+              onChange={(m) => set('previewVideo', m)}
+              kinds={['VIDEO']}
+              hint="Optional video shown on the project detail page."
             />
             <GalleryEditor
               label="Screens & media gallery"

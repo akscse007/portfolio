@@ -21,6 +21,10 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
         tags: { include: { tag: true } },
         projects: { select: { projectId: true } },
         cover: true,
+        attachments: {
+          orderBy: { order: 'asc' },
+          include: { media: { select: { id: true, kind: true, alt: true, originalName: true, mimeType: true } } },
+        },
       },
     }),
     postEditorOptions(id),
@@ -56,6 +60,13 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
           publishedAt: toLocalInput(p.publishedAt),
           tags: p.tags.map((t) => t.tag.name),
           projectIds: p.projects.map((x) => x.projectId),
+          attachments: p.attachments.map((a) => ({
+            mediaId: a.mediaId,
+            title: a.title,
+            description: a.description,
+            order: a.order,
+            media: a.media,
+          })),
         }}
       />
     </div>

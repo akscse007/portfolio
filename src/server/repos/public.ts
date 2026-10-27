@@ -21,6 +21,7 @@ export const TAGS = {
   videos: 'videos',
   cv: 'cv',
   topics: 'topics',
+  library: 'library',
 } as const;
 
 const PUBLISHED = { status: 'PUBLISHED' as const };
@@ -192,6 +193,7 @@ export const getCv = unstable_cache(loadCv, ['cv'], {
 
 const projectCardInclude = {
   cover: { select: mediaSelect },
+  previewVideo: { select: mediaSelect },
   skills: { select: { skill: { select: { name: true, slug: true } } } },
   tags: { select: { tag: { select: { name: true, slug: true } } } },
 } satisfies Prisma.ProjectInclude;
@@ -215,6 +217,7 @@ function toProjectCard(p: ProjectCardRow) {
     accent: p.accent,
     featured: p.featured,
     cover: toPublicImage(p.cover),
+    previewVideo: toPublicImage(p.previewVideo),
     skills: p.skills.map((s) => s.skill),
     tags: p.tags.map((t) => t.tag),
   };
@@ -514,6 +517,10 @@ export const getPost = unstable_cache(
           where: { achievement: PUBLISHED },
           select: { achievement: { select: { slug: true, title: true } } },
         },
+        attachments: {
+          orderBy: { order: 'asc' },
+          include: { media: { select: mediaSelect } },
+        },
       },
     });
     if (!p) return null;
@@ -552,7 +559,12 @@ export const getPost = unstable_cache(
       seoDescription: p.seoDescription,
       projects: p.projects.map((x) => x.project),
       achievements: p.achievements.map((x) => x.achievement),
-      // newer/older in reverse-chronological list
+      attachments: p.attachments
+        .map((a) => {
+          const img = toPublicImage(a.media);
+          return img ? { id: a.id, title: a.title, description: a.description, media: img } : null;
+        })
+        .filter((x): x is NonNullable<typeof x> => Boolean(x)),
       newer: idx > 0 ? all[idx - 1]! : null,
       older: idx >= 0 && idx < all.length - 1 ? all[idx + 1]! : null,
       seriesPosts,
@@ -669,11 +681,50 @@ export const getVideos = unstable_cache(
 export type PublicVideo = Awaited<ReturnType<typeof getVideos>>[number];
 
 // ─────────────────────────────────────────────────────────────
+// Library notes
+// ─────────────────────────────────────────────────────────────
+
+export const getLibraryNotes = unstable_cache(
+  async () => {
+    const rows = await prisma.libraryNote.findMany({
+      where: PUBLISHED,
+      orderBy: [{ featured: 'desc' }, { order: 'asc' }, { publishedAt: 'desc' }],
+      include: {
+        media: { select: { ...mediaSelect, sizeBytes: true, originalName: true } },
+        tags: { select: { tag: { select: { name: true, slug: true } } } },
+      },
+    });
+    return rows.map((n) => ({
+      id: n.id,
+      slug: n.slug,
+      title: n.title,
+      description: n.description,
+      subject: n.subject,
+      category: n.category,
+      academicLevel: n.academicLevel,
+      featured: n.featured,
+      publishedAt: n.publishedAt?.toISOString() ?? null,
+      media: {
+        id: n.media.id,
+        mimeType: n.media.mimeType,
+        sizeBytes: (n.media as { sizeBytes: number }).sizeBytes,
+        originalName: (n.media as { originalName: string }).originalName,
+        url: publicMediaUrl(n.media.id, 'original')!,
+      },
+      tags: n.tags.map((t) => t.tag),
+    }));
+  },
+  ['library-notes'],
+  { tags: [TAGS.library], revalidate: REVALIDATE },
+);
+export type LibraryNoteCard = Awaited<ReturnType<typeof getLibraryNotes>>[number];
+
+// ─────────────────────────────────────────────────────────────
 // Sitemap
 // ─────────────────────────────────────────────────────────────
 
 export async function getSitemapEntries() {
-  const [projects, achievements, posts, topics] = await Promise.all([
+  const [projects, achievements, posts, topics, libraryNotes] = await Promise.all([
     prisma.project.findMany({ where: PUBLISHED, select: { slug: true, updatedAt: true } }),
     prisma.achievement.findMany({ where: PUBLISHED, select: { slug: true, updatedAt: true } }),
     prisma.post.findMany({ where: publishedPostWhere(), select: { slug: true, updatedAt: true } }),
@@ -681,6 +732,7 @@ export async function getSitemapEntries() {
       where: { posts: { some: publishedPostWhere() } },
       select: { slug: true },
     }),
+    prisma.libraryNote.count({ where: PUBLISHED }),
   ]);
-  return { projects, achievements, posts, topics };
+  return { projects, achievements, posts, topics, hasLibrary: libraryNotes > 0 };
 }

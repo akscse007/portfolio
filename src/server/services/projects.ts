@@ -31,6 +31,7 @@ export async function getProjectAdmin(id: string) {
       tags: { include: { tag: true } },
       media: { orderBy: { order: 'asc' }, include: { media: true } },
       cover: true,
+      previewVideo: true,
     },
   });
   if (!p) throw new HttpError(404, 'Project not found');
@@ -40,9 +41,9 @@ export async function getProjectAdmin(id: string) {
 async function relatedMediaIds(projectId: string) {
   const p = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { coverId: true, media: { select: { mediaId: true } } },
+    select: { coverId: true, previewVideoId: true, media: { select: { mediaId: true } } },
   });
-  return p ? [p.coverId, ...p.media.map((m) => m.mediaId)] : [];
+  return p ? [p.coverId, p.previewVideoId, ...p.media.map((m) => m.mediaId)] : [];
 }
 
 export async function saveProject(input: ProjectInput, userId: string, id?: string) {
@@ -57,6 +58,7 @@ export async function saveProject(input: ProjectInput, userId: string, id?: stri
     const data = {
       ...fields,
       coverId: fields.coverId ?? null,
+      previewVideoId: fields.previewVideoId ?? null,
       publishedAt: nextPublishedAt(input.status, existing?.publishedAt),
     };
     const saved = id

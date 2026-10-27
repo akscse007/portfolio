@@ -5,7 +5,7 @@ import { getProject } from '@/server/repos/public';
 import { renderMarkdown } from '@/lib/markdown';
 import { breadcrumbJsonLd, pageMetadata } from '@/lib/seo';
 import { Breadcrumbs, ExternalLink, JsonLd, PrevNext, Prose } from '@/components/ui/primitives';
-import { MediaImage, Placeholder } from '@/components/ui/Media';
+import { MediaImage } from '@/components/ui/Media';
 import { Gallery } from '@/components/ui/Gallery';
 import { ProjectStage } from '@/components/work/ProjectStage';
 import { Reveal } from '@/components/motion/Reveal';
@@ -119,8 +119,8 @@ export default async function ProjectPage({ params }: Props) {
         </dl>
       </header>
 
-      <div className="container-page">
-        {p.cover ? (
+      {p.cover && (
+        <div className="container-page">
           <MediaImage
             image={p.cover}
             priority
@@ -128,15 +128,25 @@ export default async function ProjectPage({ params }: Props) {
             sizes="100vw"
             ratio="16 / 8"
           />
-        ) : (
-          <Placeholder
-            ratio="16 / 7"
-            seed={p.slug}
-            label="Cover image not yet uploaded"
-            className="rounded-sm border border-line"
-          />
-        )}
-      </div>
+        </div>
+      )}
+
+      {p.previewVideo && (
+        <div className="container-page mt-8">
+          <div className="overflow-hidden rounded-sm border border-line">
+            <video
+              controls
+              preload="metadata"
+              playsInline
+              className="w-full"
+              poster={p.cover?.display}
+            >
+              <source src={p.previewVideo.original} type={p.previewVideo.mimeType} />
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        </div>
+      )}
 
       <div className="container-page mt-16 grid gap-14 lg:grid-cols-12">
         <aside className="lg:col-span-4 lg:order-2">

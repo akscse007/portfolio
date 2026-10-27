@@ -34,6 +34,7 @@ export default async function NewProjectPage() {
           liveUrl: '',
           repoUrl: '',
           cover: null,
+          previewVideo: null,
           accent: '',
           status: 'DRAFT',
           featured: false,

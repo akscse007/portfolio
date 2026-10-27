@@ -200,23 +200,31 @@ export async function mediaUsage(id: string) {
   const [
     projectMedia,
     projectCovers,
+    projectPreviews,
     achievementAssets,
     postCovers,
+    postAttachments,
     videos,
     profile,
     settings,
     inlinePosts,
+    libraryNotes,
   ] = await Promise.all([
     prisma.projectMedia.findMany({
       where: { mediaId: id },
       select: { project: { select: { id: true, title: true } } },
     }),
     prisma.project.findMany({ where: { coverId: id }, select: { id: true, title: true } }),
+    prisma.project.findMany({ where: { previewVideoId: id }, select: { id: true, title: true } }),
     prisma.achievementAsset.findMany({
       where: { mediaId: id },
       select: { role: true, achievement: { select: { id: true, title: true } } },
     }),
     prisma.post.findMany({ where: { coverId: id }, select: { id: true, title: true } }),
+    prisma.postAttachment.findMany({
+      where: { mediaId: id },
+      select: { post: { select: { id: true, title: true } } },
+    }),
     prisma.video.findMany({
       where: { OR: [{ posterId: id }, { fileId: id }, { captionsId: id }] },
       select: { id: true, title: true },
@@ -230,6 +238,7 @@ export async function mediaUsage(id: string) {
       where: { content: { contains: `/media/${id}` } },
       select: { id: true, title: true },
     }),
+    prisma.libraryNote.findMany({ where: { mediaId: id }, select: { id: true, title: true } }),
   ]);
   const refs: { type: string; id: string; label: string }[] = [];
   projectMedia.forEach((r) =>
@@ -237,6 +246,9 @@ export async function mediaUsage(id: string) {
   );
   projectCovers.forEach((p) =>
     refs.push({ type: 'project', id: p.id, label: `Project cover · ${p.title}` }),
+  );
+  projectPreviews.forEach((p) =>
+    refs.push({ type: 'project', id: p.id, label: `Project video · ${p.title}` }),
   );
   achievementAssets.forEach((a) =>
     refs.push({
@@ -248,12 +260,18 @@ export async function mediaUsage(id: string) {
   postCovers.forEach((p) =>
     refs.push({ type: 'post', id: p.id, label: `Post cover · ${p.title}` }),
   );
+  postAttachments.forEach((a) =>
+    refs.push({ type: 'post', id: a.post.id, label: `Post attachment · ${a.post.title}` }),
+  );
   inlinePosts.forEach((p) =>
     refs.push({ type: 'post', id: p.id, label: `Inline image · ${p.title}` }),
   );
   videos.forEach((v) => refs.push({ type: 'video', id: v.id, label: `Video · ${v.title}` }));
   if (profile) refs.push({ type: 'profile', id: profile.id, label: 'Profile (CV / portrait)' });
   if (settings) refs.push({ type: 'settings', id: settings.id, label: 'Default social image' });
+  libraryNotes.forEach((n) =>
+    refs.push({ type: 'library-note', id: n.id, label: `Library note · ${n.title}` }),
+  );
   return refs;
 }
 
@@ -279,19 +297,23 @@ export async function recomputeMediaVisibility(ids: (string | null | undefined)[
     const [
       projectMedia,
       projectCover,
+      projectPreview,
       achievementAssets,
       postCover,
+      postAttach,
       videoRefs,
       profileRef,
       settingsRef,
       inlinePublished,
       inlineAny,
+      libraryRef,
     ] = await Promise.all([
       prisma.projectMedia.findMany({
         where: { mediaId: id },
         select: { project: { select: { status: true } } },
       }),
       prisma.project.findMany({ where: { coverId: id }, select: { status: true } }),
+      prisma.project.findMany({ where: { previewVideoId: id }, select: { status: true } }),
       prisma.achievementAsset.findMany({
         where: { mediaId: id },
         select: {
@@ -300,6 +322,10 @@ export async function recomputeMediaVisibility(ids: (string | null | undefined)[
         },
       }),
       prisma.post.findMany({ where: { coverId: id }, select: { status: true } }),
+      prisma.postAttachment.findMany({
+        where: { mediaId: id },
+        select: { post: { select: { status: true } } },
+      }),
       prisma.video.findMany({
         where: { OR: [{ posterId: id }, { fileId: id }, { captionsId: id }] },
         select: { status: true },
@@ -308,28 +334,35 @@ export async function recomputeMediaVisibility(ids: (string | null | undefined)[
       prisma.siteSettings.count({ where: { defaultOgMediaId: id } }),
       prisma.post.count({ where: { status: 'PUBLISHED', content: { contains: `/media/${id}` } } }),
       prisma.post.count({ where: { content: { contains: `/media/${id}` } } }),
+      prisma.libraryNote.findMany({ where: { mediaId: id }, select: { status: true } }),
     ]);
 
     const referenced =
       projectMedia.length +
         projectCover.length +
+        projectPreview.length +
         achievementAssets.length +
         postCover.length +
+        postAttach.length +
         videoRefs.length +
         profileRef +
         settingsRef +
-        inlineAny >
+        inlineAny +
+        libraryRef.length >
       0;
     if (!referenced) continue;
 
     const isPublic =
       projectMedia.some((r) => r.project.status === 'PUBLISHED') ||
       projectCover.some((r) => r.status === 'PUBLISHED') ||
+      projectPreview.some((r) => r.status === 'PUBLISHED') ||
       postCover.some((r) => r.status === 'PUBLISHED') ||
+      postAttach.some((a) => a.post.status === 'PUBLISHED') ||
       videoRefs.some((r) => r.status === 'PUBLISHED') ||
       profileRef > 0 ||
       settingsRef > 0 ||
       inlinePublished > 0 ||
+      libraryRef.some((n) => n.status === 'PUBLISHED') ||
       achievementAssets.some(
         (a) =>
           a.achievement.status === 'PUBLISHED' &&

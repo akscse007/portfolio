@@ -104,6 +104,7 @@ export const projectSchema = z.object({
   liveUrl: optionalUrl,
   repoUrl: optionalUrl,
   coverId: z.preprocess(emptyToNull, cuidLike.nullable()).optional(),
+  previewVideoId: z.preprocess(emptyToNull, cuidLike.nullable()).optional(),
   accent: z.preprocess(
     emptyToNull,
     z
@@ -224,6 +225,14 @@ export const cropSchema = z.object({
 
 // ── blog ──────────────────────────────────────────────────────
 
+export const postAttachmentSchema = z.object({
+  mediaId: cuidLike,
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(1000).default(''),
+  order: z.coerce.number().int().min(0).max(100).default(0),
+});
+export type PostAttachmentInput = z.infer<typeof postAttachmentSchema>;
+
 export const postSchema = z.object({
   slug: slugSchema,
   title: z.string().trim().min(3).max(160),
@@ -243,6 +252,7 @@ export const postSchema = z.object({
   publishedAt: optionalDate.optional(),
   tags: stringList(20, 40),
   projectIds: z.array(cuidLike).max(20).default([]),
+  attachments: z.array(postAttachmentSchema).max(20).default([]),
 });
 export type PostInput = z.infer<typeof postSchema>;
 
@@ -412,6 +422,52 @@ export const settingsSchema = z.object({
   footerNote: optionalText(300),
   analyticsNote: optionalText(300),
 });
+
+// ── Library notes ────────────────────────────────────────────
+
+export const LIBRARY_SUBJECTS = [
+  'Mathematics',
+  'Computer Science',
+  'AI/ML',
+  'Physics',
+  'Engineering',
+  'Finance',
+  'Statistics',
+  'General',
+] as const;
+
+export const LIBRARY_CATEGORIES = [
+  'Notes',
+  'Cheat Sheet',
+  'Formula Sheet',
+  'Study Guide',
+  'Reference',
+  'Tutorial',
+  'Problem Set',
+] as const;
+
+export const ACADEMIC_LEVELS = [
+  'High School',
+  'Undergraduate',
+  'Graduate',
+  'Professional',
+] as const;
+
+export const libraryNoteSchema = z.object({
+  slug: slugSchema,
+  title: z.string().trim().min(2).max(200),
+  description: z.string().trim().max(2000).default(''),
+  subject: z.enum(LIBRARY_SUBJECTS).default('General'),
+  category: z.enum(LIBRARY_CATEGORIES).default('Notes'),
+  academicLevel: z.enum(ACADEMIC_LEVELS).default('Undergraduate'),
+  mediaId: cuidLike,
+  status: publishStatus.default('DRAFT'),
+  featured: z.boolean().default(false),
+  order: z.coerce.number().int().min(0).max(10_000).default(0),
+  publishedAt: optionalDate,
+  tags: stringList(20, 40),
+});
+export type LibraryNoteInput = z.infer<typeof libraryNoteSchema>;
 
 export const mediaUpdateSchema = z.object({
   alt: z.string().trim().max(300).default(''),
